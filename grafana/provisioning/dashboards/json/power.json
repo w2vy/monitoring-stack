@@ -35,7 +35,7 @@
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
       "options": {
         "mode": "markdown",
-        "content": "**UPS power** via NUT (mtm0, mtm2–5, pve20, pve55 — 7 UPSes; **mtm1 commented out** in `telegraf.conf` per follow-up **P-4**) + **DCMI in-band watts** for the R820s (pve20, pve40). **pve40 has no UPS** of its own — its draw shows under **pve55's TRIPP** (not a gap). **pve55 30d kWh appears low** (~3.6 kWh) because pve55 joined NUT 2026-05-20 (~4 days of data, not 30); ignore the stat until it back-fills. Battery-health panels (Replace-Battery flag, last weekly self-test result, runtime÷load drift, battery age) ship as the next chunk."
+        "content": "**UPS power** via NUT (mtm0, mtm2–5, pve20, pve55 — 7 UPSes; **mtm1 commented out** in `telegraf.conf` per follow-up **P-4**) + **DCMI in-band watts** for the R820s (pve20, pve40). **pve40 has no UPS** of its own — its draw shows under **pve55's TRIPP** (not a gap). **pve55 30d kWh appears low** (~3.6 kWh) because pve55 joined NUT 2026-05-20 (~4 days of data, not 30); ignore the stat until it back-fills. **Battery-health panels** at the bottom: `ups_status` row turns red on `OB`/`RB`/`LB`; weekly self-test table shows the last `battery_weekly_test.sh` result (pve55 missing — TRIPP has no self-test instcmd); runtime÷load timeseries normalizes for load swings so battery degradation isn't masked. **Battery age stat** is deferred until `ups_battery_baselines.json` lands."
       }
     },
     {
@@ -251,6 +251,126 @@
       },
       "options": {
         "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "UPS status (Replace-Battery / Alarm watch)",
+      "gridPos": { "x": 0, "y": 38, "w": 12, "h": 6 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> keep(columns: [\"_time\", \"host\", \"ups_model\", \"ups_status\"])\n  |> group()\n  |> sort(columns: [\"host\"])",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": {
+          "excludeByName": { "_time": true },
+          "renameByName": {
+            "host": "Host",
+            "ups_model": "Model",
+            "ups_status": "Status"
+          }
+        } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              { "id": "mappings", "value": [
+                { "type": "regex", "options": { "pattern": "RB", "result": { "color": "red", "text": "$0 (REPLACE BATTERY)", "index": 0 } } },
+                { "type": "regex", "options": { "pattern": "^OB", "result": { "color": "red", "text": "$0", "index": 1 } } },
+                { "type": "regex", "options": { "pattern": "LB", "result": { "color": "red", "text": "$0", "index": 2 } } },
+                { "type": "regex", "options": { "pattern": "ALARM", "result": { "color": "orange", "text": "$0", "index": 3 } } },
+                { "type": "regex", "options": { "pattern": "CHRG", "result": { "color": "blue", "text": "$0", "index": 4 } } },
+                { "type": "regex", "options": { "pattern": "^OL$", "result": { "color": "green", "text": "OL (online)", "index": 5 } } }
+              ] },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Last weekly battery self-test (per UPS)",
+      "gridPos": { "x": 12, "y": 38, "w": 12, "h": 6 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -90d)\n  |> filter(fn: (r) => r._measurement == \"ups_test\" and r._field == \"result\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"ups_model\"])\n  |> group()\n  |> sort(columns: [\"host\"])",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": {
+          "renameByName": {
+            "_time": "Last test",
+            "_value": "Result",
+            "host": "Host",
+            "ups_model": "Model"
+          },
+          "indexByName": { "host": 0, "ups_model": 1, "_time": 2, "_value": 3 }
+        } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true },
+          "noValue": "no test recorded"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Result" },
+            "properties": [
+              { "id": "mappings", "value": [
+                { "type": "regex", "options": { "pattern": "(?i)passed", "result": { "color": "green", "text": "$0", "index": 0 } } },
+                { "type": "regex", "options": { "pattern": "(?i)fail", "result": { "color": "red", "text": "$0", "index": 1 } } },
+                { "type": "regex", "options": { "pattern": "(?i)progress", "result": { "color": "blue", "text": "$0", "index": 2 } } },
+                { "type": "regex", "options": { "pattern": "(?i)skip", "result": { "color": "dark-gray", "text": "$0", "index": 3 } } }
+              ] },
+              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Last test" },
+            "properties": [
+              { "id": "unit", "value": "dateTimeAsIso" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Runtime ÷ load trend (battery degradation signal)",
+      "gridPos": { "x": 0, "y": 44, "w": 24, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\")\n  |> filter(fn: (r) => r._field == \"battery_runtime\" or r._field == \"load\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"_field\", \"host\"])\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => r.load > 0.0)\n  |> map(fn: (r) => ({ _time: r._time, host: r.host, _value: r.battery_runtime / r.load }))\n  |> group(columns: [\"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false, "axisLabel": "seconds per load-%" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "min"] },
         "tooltip": { "mode": "multi", "sort": "desc" }
       }
     }

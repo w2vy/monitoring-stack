@@ -78,7 +78,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "import \"join\"\n\nbase = from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> keep(columns: [\"_time\", \"_field\", \"_value\", \"host\", \"device\", \"model\", \"serial_no\"])\n  |> pivot(rowKey: [\"host\", \"device\", \"model\", \"serial_no\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"host\", \"device\", \"model\", \"serial_no\", \"health_ok\", \"temp_c\", \"power_on_hours\", \"reallocated_sectors_count\", \"udma_crc_errors\", \"uncorrectable_errors\", \"percent_lifetime_remain\"])\n  |> sort(columns: [\"host\", \"device\"])",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> keep(columns: [\"_field\", \"_value\", \"host\", \"device\", \"model\", \"serial_no\"])\n  |> toFloat()\n  |> group()\n  |> pivot(rowKey: [\"host\", \"device\", \"model\", \"serial_no\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> sort(columns: [\"host\", \"device\", \"serial_no\"])",
           "format": "table"
         }
       ],
@@ -179,7 +179,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"temp_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"device\", \"model\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"device\", \"model\"])"
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"temp_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"device\", \"model\", \"serial_no\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"device\", \"model\", \"serial_no\"])"
         }
       ],
       "fieldConfig": {
@@ -208,7 +208,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"reallocated_sectors_count\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\"])"
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"reallocated_sectors_count\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\", \"model\", \"serial_no\"])"
         }
       ],
       "options": {
@@ -227,7 +227,8 @@
             { "color": "red", "value": 1 }
           ] },
           "unit": "none",
-          "noValue": "all clean"
+          "noValue": "all clean",
+          "displayName": "${__field.labels.host} ${__field.labels.serial_no}"
         },
         "overrides": []
       }
@@ -241,7 +242,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"udma_crc_errors\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\"])"
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"udma_crc_errors\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\", \"model\", \"serial_no\"])"
         }
       ],
       "options": {
@@ -260,7 +261,8 @@
             { "color": "red", "value": 1 }
           ] },
           "unit": "none",
-          "noValue": "all clean"
+          "noValue": "all clean",
+          "displayName": "${__field.labels.host} ${__field.labels.serial_no}"
         },
         "overrides": []
       }
@@ -274,7 +276,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"uncorrectable_errors\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\"])"
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"uncorrectable_errors\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> last()\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_value\", \"host\", \"device\", \"model\", \"serial_no\"])"
         }
       ],
       "options": {
@@ -293,7 +295,8 @@
             { "color": "red", "value": 1 }
           ] },
           "unit": "none",
-          "noValue": "all clean"
+          "noValue": "all clean",
+          "displayName": "${__field.labels.host} ${__field.labels.serial_no}"
         },
         "overrides": []
       }
@@ -307,7 +310,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"percent_lifetime_remain\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"device\", \"model\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"device\", \"model\"])"
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"smart_device\" and r._field == \"percent_lifetime_remain\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"device\", \"model\", \"serial_no\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"device\", \"model\", \"serial_no\"])"
         }
       ],
       "fieldConfig": {

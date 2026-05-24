@@ -1,0 +1,213 @@
+{
+  "uid": "server-temps",
+  "title": "Server Temperatures",
+  "tags": ["monitoring-stack", "ipmi", "temperature"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"monitoring\", tag: \"host\", predicate: (r) => r._measurement == \"ipmi_sensor\", start: -30d)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "About this dashboard",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "**IPMI temps** from pve20 / pve40 / pve55, full 30d. **pve55 R710 BMC disables CPU + planar sensors** — only `ambient_temp` is real for pve55; per-CPU panels show pve20+pve40 only. **Inlet→exhaust ΔT** under steady load is the airflow signal: if it falls over weeks at the same load, a fan is failing or airflow is being obstructed. CPU temps use IPMI sensor names `temp` distinguished by `entity_id` (3.1–3.4 = CPU 1–4)."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Max CPU °C (last hour)",
+      "gridPos": { "x": 0, "y": 3, "w": 12, "h": 4 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\" and r.name == \"temp\" and r.unit == \"degrees_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> filter(fn: (r) => r._value > 0)\n  |> group(columns: [\"host\"])\n  |> max()\n  |> keep(columns: [\"_value\", \"host\"])"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 60 },
+            { "color": "red", "value": 75 }
+          ] },
+          "unit": "celsius",
+          "displayName": "${__field.labels.host}"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "pve55 sensor status (R710 BMC limitation)",
+      "gridPos": { "x": 12, "y": 3, "w": 12, "h": 4 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r.host == \"pve55\")\n  |> filter(fn: (r) => r.name == \"cpu_temp_interf\" or r.name == \"planar_temp\")\n  |> last()\n  |> keep(columns: [\"name\", \"status_desc\"])\n  |> group()"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/status_desc/", "values": true },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "dark-blue" },
+          "unit": "string"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "CPU temperatures (per host, per CPU)",
+      "gridPos": { "x": 0, "y": 7, "w": 24, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\" and r.name == \"temp\" and r.unit == \"degrees_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> filter(fn: (r) => r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"entity_id\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"entity_id\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 60 },
+            { "color": "red", "value": 75 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Inlet vs exhaust (overlaid, per host)",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\")\n  |> filter(fn: (r) => r.name == \"inlet_temp\" or r.name == \"exhaust_temp\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"name\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"name\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Inlet→exhaust ΔT (airflow health, pve20 + pve40)",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\")\n  |> filter(fn: (r) => r.name == \"inlet_temp\" or r.name == \"exhaust_temp\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"name\"])\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"name\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ _time: r._time, host: r.host, _value: r.exhaust_temp - r.inlet_temp }))\n  |> group(columns: [\"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 4 },
+            { "color": "green", "value": 8 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Ambient / inlet temperature (all hosts)",
+      "gridPos": { "x": 0, "y": 25, "w": 24, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\")\n  |> filter(fn: (r) => r.name == \"inlet_temp\" or r.name == \"ambient_temp\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"name\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"name\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 28 },
+            { "color": "red", "value": 35 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

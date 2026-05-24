@@ -1,0 +1,258 @@
+{
+  "uid": "power",
+  "title": "Power",
+  "tags": ["monitoring-stack", "nut", "ups", "power"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "Host",
+        "type": "query",
+        "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"monitoring\", tag: \"host\", predicate: (r) => r._measurement == \"ups\", start: -30d)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "About this dashboard",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "**UPS power** via NUT (mtm0, mtm2–5, pve20, pve55 — 7 UPSes; **mtm1 commented out** in `telegraf.conf` per follow-up **P-4**) + **DCMI in-band watts** for the R820s (pve20, pve40). **pve40 has no UPS** of its own — its draw shows under **pve55's TRIPP** (not a gap). **pve55 30d kWh appears low** (~3.6 kWh) because pve55 joined NUT 2026-05-20 (~4 days of data, not 30); ignore the stat until it back-fills. Battery-health panels (Replace-Battery flag, last weekly self-test result, runtime÷load drift, battery age) ship as the next chunk."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Energy used (kWh) — selected range",
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 5 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> group(columns: [\"host\"])\n  |> integral(unit: 1h, column: \"_value\")\n  |> map(fn: (r) => ({ host: r.host, _value: r._value / 1000.0 }))"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> group()\n  |> integral(unit: 1h, column: \"_value\")\n  |> map(fn: (r) => ({ host: \"ALL\", _value: r._value / 1000.0 }))"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "continuous-GrYlRd" },
+          "unit": "kwatth",
+          "decimals": 1,
+          "displayName": "${__field.labels.host}"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "UPS watts (stacked, per host)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 30, "showPoints": "never", "spanNulls": false, "stacking": { "mode": "normal", "group": "A" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "DCMI in-band watts (R820s only)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 9 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_dcmi\" and r._field == \"power_watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Total lab draw (sum across UPSes)",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 7 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"watts\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"_time\"])\n  |> sum()\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "spanNulls": false },
+          "displayName": "Total"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max", "min"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Battery charge (%)",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"battery_charge\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 50 },
+            { "color": "green", "value": 90 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "min"] },
+        "tooltip": { "mode": "multi", "sort": "asc" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Battery runtime (minutes)",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"battery_runtime\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _value: r._value / 60.0 }))\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "min", "mean"] },
+        "tooltip": { "mode": "multi", "sort": "asc" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Input voltage (V)",
+      "gridPos": { "x": 0, "y": 31, "w": 12, "h": 7 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"input_voltage\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "volt",
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "min", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "UPS load (%)",
+      "gridPos": { "x": 12, "y": 31, "w": 12, "h": 7 },
+      "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ups\" and r._field == \"load\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "spanNulls": false },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 70 },
+            { "color": "red", "value": 85 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["last", "mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

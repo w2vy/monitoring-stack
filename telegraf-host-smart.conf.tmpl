@@ -1,0 +1,13 @@
+# Telegraf SMART input — Phase 2 drive-health monitoring
+# Substitute __DEVICES__ before deploy.
+#   - empty list ([]) = auto-scan direct-attached SATA/NVMe via `smartctl --scan`
+#   - populated list = explicit megaraid device strings, e.g.
+#       devices = ["/dev/sda -d megaraid,8", "/dev/sda -d megaraid,15"]
+
+[[inputs.smart]]
+  path_smartctl = "/usr/sbin/smartctl"
+  use_sudo = false
+  attributes = true
+  interval = "30m"
+  timeout = "30s"
+  devices = [__DEVICES__]

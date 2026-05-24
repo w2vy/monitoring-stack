@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: InfluxDB
+    type: influxdb
+    uid: influxdb-monitoring
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: moltentech
+      defaultBucket: monitoring
+      tlsSkipVerify: true
+    secureJsonData:
+      token: ${INFLUX_TOKEN}
+    isDefault: true
+    editable: true

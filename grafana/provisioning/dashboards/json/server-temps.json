@@ -4,7 +4,7 @@
   "tags": ["monitoring-stack", "ipmi", "temperature"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "graphTooltip": 1,
   "refresh": "5m",
@@ -35,7 +35,7 @@
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
       "options": {
         "mode": "markdown",
-        "content": "**IPMI temps** from pve20 / pve40 / pve55, full 30d. **pve55 R710 BMC disables CPU + planar sensors** — only `ambient_temp` is real for pve55; per-CPU panels show pve20+pve40 only. **Inlet→exhaust ΔT** under steady load is the airflow signal: if it falls over weeks at the same load, a fan is failing or airflow is being obstructed. CPU temps use IPMI sensor names `temp` distinguished by `entity_id` (3.1–3.4 = CPU 1–4)."
+        "content": "**Temps** from pve20 / pve40 / pve55, full 30d. **pve55 R710 BMC disables CPU + planar IPMI sensors** — `ambient_temp` is the only real IPMI temp for pve55. Per-CPU temps for pve55 come from `lm-sensors` / `coretemp` (measurement `sensors`, field `tempN_input`, tags `chip`+`feature`) instead of IPMI; 12 cores across 2 sockets. **Inlet→exhaust ΔT** under steady load is the airflow signal: if it falls over weeks at the same load, a fan is failing or airflow is being obstructed. R820 IPMI per-CPU temps use sensor `temp` distinguished by `entity_id` (3.1–3.4 = CPU 1–4)."
       }
     },
     {
@@ -47,7 +47,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\" and r.name == \"temp\" and r.unit == \"degrees_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> filter(fn: (r) => r._value > 0)\n  |> group(columns: [\"host\"])\n  |> max()\n  |> keep(columns: [\"_value\", \"host\"])"
+          "query": "ipmi = from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\" and r.name == \"temp\" and r.unit == \"degrees_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> filter(fn: (r) => r._value > 0)\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])\n\ncore = from(bucket: \"monitoring\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"sensors\" and r._field =~ /^temp[0-9]+_input$/ and r.chip =~ /^coretemp-isa-/)\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> keep(columns: [\"_time\", \"_value\", \"host\"])\n\nunion(tables: [ipmi, core])\n  |> group(columns: [\"host\"])\n  |> max()\n  |> keep(columns: [\"_value\", \"host\"])"
         }
       ],
       "options": {
@@ -101,13 +101,17 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "CPU temperatures (per host, per CPU)",
+      "title": "CPU temperatures (per host, per CPU / core)",
       "gridPos": { "x": 0, "y": 7, "w": 24, "h": 9 },
       "datasource": { "type": "influxdb", "uid": "influxdb-monitoring" },
       "targets": [
         {
           "refId": "A",
           "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ipmi_sensor\" and r._field == \"value\" and r.name == \"temp\" and r.unit == \"degrees_c\")\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> filter(fn: (r) => r._value > 0)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"entity_id\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"entity_id\"])"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: \"monitoring\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"sensors\" and r._field =~ /^temp[0-9]+_input$/ and r.chip =~ /^coretemp-isa-/)\n  |> filter(fn: (r) => r.host =~ /^${host:regex}$/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> group(columns: [\"host\", \"chip\", \"feature\"])\n  |> keep(columns: [\"_time\", \"_value\", \"host\", \"chip\", \"feature\"])"
         }
       ],
       "fieldConfig": {

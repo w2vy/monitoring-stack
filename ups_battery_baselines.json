@@ -1,0 +1,14 @@
+{
+  "description": "Per-UPS battery baselines from front-panel TEST press. Updated on battery replacement; older rows kept as audit trail in the InfluxDB ups_test series (manual=1).",
+  "tripplite": {
+    "ups_model": "TRIPP_LITE_UPS",
+    "vendor_product": "09ae:3016",
+    "battery_install_date": null,
+    "baseline_date": "2026-05-24",
+    "v_pre": 27.1,
+    "v_min": 26.0,
+    "v_delta": 1.1,
+    "load_pct": 37,
+    "note": "Initial empirical baseline from a 2026-05-24 TEST press; battery install date unknown. Replace this entry after the next battery swap."
+  }
+}

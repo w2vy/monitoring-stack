@@ -22,8 +22,8 @@ INFLUX_ORG="${INFLUX_ORG:-moltentech}"
 INFLUX_BUCKET="${INFLUX_BUCKET:-monitoring}"
 : "${INFLUX_TOKEN:?INFLUX_TOKEN not set (export it or put it in $ENV_FILE)}"
 
-REPORT_DIR="${REPORT_DIR:-/root/drive_health_reports}"
-BASELINES_FILE="${BASELINES_FILE:-/root/monitoring-stack/baselines.json}"
+REPORT_DIR="${REPORT_DIR:-$HOME/drive_health_reports}"
+BASELINES_FILE="${BASELINES_FILE:-$HOME/monitoring-stack/baselines.json}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-6}"
 
 mkdir -p "$REPORT_DIR"

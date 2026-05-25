@@ -341,6 +341,22 @@ def build_report(month, month_hours, rows, fill, total_raw, total_filled,
         lines.append("Readings only need to bracket the month (any dates before "
                      "and after).")
         lines.append("=" * 60)
+        lines.append("")
+        lines.append("=" * 60)
+        lines.append("BATTERY HEALTH CHECK (Tripp Lite UPS)")
+        lines.append("")
+        lines.append("While you're at the panel, press the front-panel TEST button on")
+        lines.append("the Tripp Lite UPS. From any terminal, before walking over:")
+        lines.append("")
+        lines.append("  ssh w2vy '~/monitoring-stack/tripplite_battery_test.sh tripplite'")
+        lines.append("")
+        lines.append("It watches NUT for up to 5 minutes, captures the voltage sag,")
+        lines.append("and logs to InfluxDB. Compare to the baseline; widening sag = aging battery.")
+        lines.append("")
+        lines.append("After a battery replacement, set a new baseline:")
+        lines.append("  ssh w2vy '~/monitoring-stack/tripplite_battery_test.sh tripplite \\")
+        lines.append("      --set-baseline --note \"replaced battery YYYY-MM-DD\"'")
+        lines.append("=" * 60)
 
     return "\n".join(lines) + "\n"
 
